@@ -117,7 +117,9 @@ export default function DashboardPage() {
   const [saveStatus, setSaveStatus] = useState("Loading...");
   const [userName, setUserName] = useState("friend");
   const [motivation, setMotivation] = useState(motivationMessages[0]);
-  const [appreciation, setAppreciation] = useState("");
+  const [appreciation, setAppreciation] = useState(
+    getAppreciationMessage("friend"),
+  );
   const [focusMessage, setFocusMessage] = useState("");
   const [activeFocus, setActiveFocus] = useState(null);
   const [isSavingFocus, setIsSavingFocus] = useState(false);
@@ -134,7 +136,6 @@ export default function DashboardPage() {
   const [recentlyAddedTask, setRecentlyAddedTask] = useState("");
   const [recentlyCompletedMainTask, setRecentlyCompletedMainTask] =
     useState("");
-  const [customTime, setCustomTime] = useState({});
 
   //********************* *//
 
@@ -157,7 +158,9 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (hasAskedName.current) return;
+    if (hasAskedName.current) {
+      return;
+    }
 
     hasAskedName.current = true;
 
@@ -167,8 +170,6 @@ export default function DashboardPage() {
 
     localStorage.setItem(USER_NAME_KEY, nextName);
     setUserName(nextName);
-
-    // ✅ FIX: set appreciation AFTER mount
     setAppreciation(getAppreciationMessage(nextName));
   }, []);
 
@@ -263,37 +264,12 @@ export default function DashboardPage() {
   function handleTaskFocus(blockType, taskType, taskIndex, duration) {
     if (!todayData || isFocusBusy) return;
 
-    const block = todayData.blocks?.[blockType] || {};
-
-    // 🛑 CHECK MAIN TASK
-    if (taskType === "main") {
-      const main = getMainTask(block.mainTask);
-
-      if (main.completed) {
-        setFocusMessage("Task already completed ✅");
-        return;
-      }
+    if (duration === "custom") {
+      const custom = prompt("Enter minutes:");
+      if (!custom) return;
+      duration = Number(custom);
     }
 
-    // 🛑 CHECK SUB TASK
-    if (taskType === "sub") {
-      const tasks = block.smallTasks || [];
-      const task = tasks[taskIndex];
-
-      if (task?.completed) {
-        setFocusMessage("Task already completed ✅");
-        return;
-      }
-    }
-
-    // 👉 CUSTOM TIME
-    // if (duration === "custom") {
-    //   const custom = prompt("Enter minutes:");
-    //   if (!custom) return;
-    //   duration = Number(custom);
-    // }
-
-    // ✅ START TIMER
     setActiveFocus({
       blockType,
       taskType,
@@ -529,49 +505,6 @@ export default function DashboardPage() {
     });
   }
 
-  function getFocusedTaskLabel() {
-    if (!activeFocus || !todayData) return "";
-
-    const block = todayData.blocks?.[activeFocus.blockType] || {};
-
-    // MAIN TASK
-    if (activeFocus.taskType === "main") {
-      const main = getMainTask(block.mainTask);
-      return main.title || "Main task";
-    }
-
-    // SUB TASK
-    if (activeFocus.taskType === "sub") {
-      const tasks = block.smallTasks || [];
-      const task = tasks[activeFocus.taskIndex];
-      return task?.title || "Sub task";
-    }
-
-    return "";
-  }
-
-  function getPriorityColor(priority, completed) {
-    if (completed) {
-      return "bg-yellow-400 border-yellow-400 text-black shadow-[0_0_8px_rgba(255,215,0,0.6)]";
-    }
-
-    switch (priority) {
-      case 1: // 🔴 High
-        return "border-red-500 text-red-400 shadow-[0_0_6px_rgba(255,0,0,0.5)]";
-
-      case 2: // 🟡 Medium
-        return "border-yellow-400 text-yellow-300 shadow-[0_0_6px_rgba(255,215,0,0.5)]";
-
-      case 3: // 🟢 Low
-        return "border-green-500 text-green-400 shadow-[0_0_6px_rgba(0,255,0,0.4)]";
-
-      default:
-        return "border-slate-500";
-    }
-  }
-
-  //************component started**************** *//
-
   return (
     <main className="fade-in min-h-screen px-4 py-10 text-white sm:py-14">
       <section className="mx-auto w-full max-w-6xl">
@@ -623,33 +556,50 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-white">
-                🎯 Active Focus
+                Focus session
               </h2>
-
-              <p className="mt-1 text-sm text-slate-400">
-                Focus only starts when you choose a task
-              </p>
               <p className="mt-1 text-sm font-medium text-slate-400">
                 Today's focus: {dailyFocusTotal} minutes
               </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {focusDurations.map((duration) => {
+                const isActive = activeFocus?.duration === duration;
+
+                return (
+                  <button
+                    key={duration}
+                    type="button"
+                    onClick={() => handleStartFocus(duration)}
+                    disabled={!todayData || isFocusBusy}
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-yellow-300/40 disabled:cursor-not-allowed disabled:opacity-50 ${
+                      isActive
+                        ? "border-yellow-400/50 bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 shadow-[0_0_10px_rgba(255,215,0,0.4)]"
+                        : "border-slate-700 bg-slate-800 text-slate-200 hover:border-yellow-400/30 hover:text-yellow-200"
+                    }`}
+                  >
+                    {duration} min
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={handleStartAnyway}
+                disabled={!todayData || isFocusBusy}
+                className="rounded-md bg-gradient-to-r from-yellow-400 to-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-500/10 transition duration-200 hover:shadow-[0_0_10px_rgba(255,215,0,0.4)] active:scale-95 focus:outline-none focus:ring-2 focus:ring-yellow-300/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Start Anyway
+              </button>
             </div>
           </div>
 
           {activeFocus && (
             <div className="focus-enter mt-5 rounded-xl border border-yellow-400/30 bg-slate-950/80 px-4 py-4 text-center shadow-[0_0_10px_rgba(255,215,0,0.4)]">
               <p className="text-sm font-semibold text-yellow-200">
-                🎯 Focusing on:
+                Active {activeFocus.duration}-minute session
               </p>
-
-              <p className="mt-1 text-lg font-semibold text-yellow-100">
-                {getFocusedTaskLabel()}
-              </p>
-
-              <p className="mt-2 text-sm text-slate-400">
-                {activeFocus.blockType?.toUpperCase()}
-              </p>
-
-              <p className="mt-3 text-4xl font-bold text-white">
+              <p className="mt-1 text-4xl font-bold text-white">
                 {formatTime(activeFocus.remainingSeconds)}
               </p>
             </div>
@@ -689,16 +639,15 @@ export default function DashboardPage() {
                   >
                     Main task
                   </label>
-
                   <div className="mt-2">
                     <div
-                      className={`mt-3 rounded-xl border p-4 transition-all duration-300 ${
+                      className={`flex items-center gap-2 ${
                         isActiveTask(section.key, "main")
-                          ? "border-yellow-400 bg-gradient-to-r from-yellow-400/10 to-amber-500/10 shadow-[0_0_20px_rgba(255,215,0,0.3)] animate-softPulse"
-                          : "border-slate-700 bg-slate-900/60 hover:border-yellow-400/30"
+                          ? "ring-2 ring-yellow-400 rounded-md p-1"
+                          : ""
                       }`}
                     >
-                      {/* <input
+                      <input
                         type="checkbox"
                         checked={mainTask.completed}
                         onChange={() => {
@@ -710,20 +659,7 @@ export default function DashboardPage() {
                           }
                         }}
                         className="h-5 w-5"
-                      /> */}
-                      <button
-                        onClick={() => {
-                          handleMainTaskToggle(section.key);
-                          setActiveFocus(null);
-                        }}
-                        className={`h-6 w-6 flex items-center justify-center rounded border transition ${
-                          mainTask.completed
-                            ? "bg-green-400 border-green-400 text-black shadow-[0_0_10px_rgba(255,215,0,0.6)]"
-                            : "border-green-400 text-green-300"
-                        }`}
-                      >
-                        {mainTask.completed && "✓"}
-                      </button>
+                      />
 
                       <input
                         type="text"
@@ -736,62 +672,19 @@ export default function DashboardPage() {
                           mainTask.completed ? "line-through opacity-60" : ""
                         }`}
                       />
-                      {customTime[`${section.key}-main`] !== undefined && (
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            type="number"
-                            placeholder="Min"
-                            value={customTime[`${section.key}-main`] || ""}
-                            onChange={(e) =>
-                              setCustomTime({
-                                ...customTime,
-                                [`${section.key}-main`]: e.target.value,
-                              })
-                            }
-                            className="w-20 px-2 py-1 rounded bg-slate-900 border border-yellow-400/30 text-yellow-200 outline-none"
-                          />
 
-                          <button
-                            onClick={() => {
-                              const value = Number(
-                                customTime[`${section.key}-main`],
-                              );
-                              if (!value) return;
-
-                              handleTaskFocus(section.key, "main", null, value);
-
-                              setCustomTime({
-                                ...customTime,
-                                [`${section.key}-main`]: undefined,
-                              });
-                            }}
-                            className="px-3 py-1 rounded bg-yellow-500 text-black text-xs hover:scale-105 transition"
-                          >
-                            Start
-                          </button>
-                        </div>
-                      )}
                       <select
-                        onChange={(e) => {
-                          const val = e.target.value;
-
-                          if (val === "custom") {
-                            setCustomTime({
-                              ...customTime,
-                              [`${section.key}-main`]: "",
-                            });
-                            return;
-                          }
-
+                        onChange={(e) =>
                           handleTaskFocus(
                             section.key,
                             "main",
                             null,
-                            Number(val),
-                          );
-                        }}
-                        disabled={mainTask.completed}
-                        className="bg-slate-800 text-white text-xs rounded px-2 py-1"
+                            e.target.value === "custom"
+                              ? "custom"
+                              : Number(e.target.value),
+                          )
+                        }
+                        className="bg-slate-800 text-white text-xs rounded px-1 py-1"
                       >
                         <option value="">🎯</option>
                         <option value={2}>2m</option>
@@ -917,102 +810,39 @@ export default function DashboardPage() {
                       const taskKey = `${section.key}-${taskIndex}-${task.title}`;
 
                       return (
-                        <li
-                          key={`${section.key}-${taskIndex}-${task.title}`}
-                          className="rounded-md border px-3 py-2"
-                        >
+                        <li className="rounded-md border px-3 py-2">
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => {
                                 handleToggleTask(section.key, taskIndex);
-                                setActiveFocus(null);
+
+                                // 🛑 stop focus if completed
+                                if (
+                                  isActiveTask(section.key, "sub", taskIndex)
+                                ) {
+                                  setActiveFocus(null);
+                                }
                               }}
-                              className={`h-5 w-5 flex items-center justify-center rounded border transition ${getPriorityColor(
-                                task.priority,
-                                task.completed,
-                              )}`}
-                            >
-                              {task.completed && "✓"}
-                            </button>
+                              className="h-5 w-5 border rounded"
+                            />
 
                             <span className="text-sm text-slate-200 flex-1">
                               {task.title}
                             </span>
-                            {customTime[`${section.key}-${taskIndex}`] !==
-                              undefined && (
-                              <div className="flex gap-2 mt-1">
-                                <input
-                                  type="number"
-                                  placeholder="Min"
-                                  value={
-                                    customTime[`${section.key}-${taskIndex}`] ||
-                                    ""
-                                  }
-                                  onChange={(e) =>
-                                    setCustomTime({
-                                      ...customTime,
-                                      [`${section.key}-${taskIndex}`]:
-                                        e.target.value,
-                                    })
-                                  }
-                                  className="w-16 px-2 py-1 rounded bg-slate-900 border border-yellow-400/30 text-yellow-200 outline-none"
-                                />
 
-                                <button
-                                  onClick={() => {
-                                    const value = Number(
-                                      customTime[`${section.key}-${taskIndex}`],
-                                    );
-                                    if (!value) return;
-
-                                    handleTaskFocus(
-                                      section.key,
-                                      "sub",
-                                      taskIndex,
-                                      value,
-                                    );
-
-                                    setCustomTime({
-                                      ...customTime,
-                                      [`${section.key}-${taskIndex}`]:
-                                        undefined,
-                                    });
-                                  }}
-                                  className="px-2 py-1 rounded bg-yellow-500 text-black text-xs"
-                                >
-                                  Start
-                                </button>
-                              </div>
-                            )}
-
-                            <select
-                              onChange={(e) => {
-                                const val = e.target.value;
-
-                                if (val === "custom") {
-                                  setCustomTime({
-                                    ...customTime,
-                                    [`${section.key}-${taskIndex}`]: "",
-                                  });
-                                  return;
-                                }
-
+                            <button
+                              onClick={() =>
                                 handleTaskFocus(
                                   section.key,
                                   "sub",
                                   taskIndex,
-                                  Number(val),
-                                );
-                              }}
-                              disabled={task.completed}
-                              className="bg-slate-800 text-white text-xs rounded px-1 py-1"
+                                  5,
+                                )
+                              }
+                              className="text-xs px-2 py-1 rounded bg-yellow-500 text-black"
                             >
-                              <option value="">🎯</option>
-                              <option value={2}>2m</option>
-                              <option value={5}>5m</option>
-                              <option value={25}>25m</option>
-                              <option value="custom">Custom</option>
-                            </select>
+                              🎯
+                            </button>
                           </div>
 
                           {/* ⏱ Timer BELOW */}

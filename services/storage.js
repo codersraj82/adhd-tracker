@@ -18,17 +18,26 @@ function createDefaultData(date = getTodayDate()) {
     focusSessions: [],
     blocks: {
       morning: {
-        mainTask: "",
+        mainTask: {
+          title: "",
+          completed: false,
+        },
         smallTasks: [],
         mood: "neutral",
       },
       work: {
-        mainTask: "",
+        mainTask: {
+          title: "",
+          completed: false,
+        },
         smallTasks: [],
         mood: "neutral",
       },
       evening: {
-        mainTask: "",
+        mainTask: {
+          title: "",
+          completed: false,
+        },
         smallTasks: [],
         mood: "neutral",
       },
@@ -44,6 +53,20 @@ function mergeWithDefaultData(data, date = getTodayDate()) {
   }
 
   function mergeBlock(defaultBlock, savedBlock = {}) {
+    function mergeMainTask(mainTask) {
+      if (typeof mainTask === "string") {
+        return {
+          title: mainTask,
+          completed: false,
+        };
+      }
+
+      return {
+        title: typeof mainTask?.title === "string" ? mainTask.title : "",
+        completed: Boolean(mainTask?.completed),
+      };
+    }
+
     const smallTasks = Array.isArray(savedBlock.smallTasks)
       ? savedBlock.smallTasks.map((task) => ({
           title: typeof task?.title === "string" ? task.title : "",
@@ -57,6 +80,7 @@ function mergeWithDefaultData(data, date = getTodayDate()) {
     return {
       ...defaultBlock,
       ...savedBlock,
+      mainTask: mergeMainTask(savedBlock.mainTask),
       smallTasks,
       mood: MOODS.includes(savedBlock.mood) ? savedBlock.mood : "neutral",
     };

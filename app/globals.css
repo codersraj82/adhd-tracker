@@ -13,8 +13,24 @@ body {
 
 body {
   margin: 0;
-  color: #172033;
-  background: linear-gradient(135deg, #f7fbff 0%, #eef7f1 55%, #fff8ec 100%);
+  color: #f8fafc;
+  background: linear-gradient(135deg, #111827 0%, #0f172a 48%, #020617 100%);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in 280ms ease-out;
 }
 
 @keyframes task-enter {
@@ -47,4 +63,81 @@ body {
 
 .focus-enter {
   animation: focus-enter 240ms ease-out;
+}
+
+@keyframes progress-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.45);
+  }
+}
+
+.progress-glow {
+  animation: progress-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-complete-pulse {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+
+  50% {
+    transform: scaleX(1.01);
+  }
+}
+
+.progress-complete-pulse {
+  animation: progress-complete-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes checkbox-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.18);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.checkbox-pop {
+  animation: checkbox-pop 180ms ease-out;
+}
+
+@keyframes focus-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.25);
+  }
+
+  50% {
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.38);
+  }
+}
+
+.focus-pulse {
+  animation: focus-pulse 2s ease-in-out infinite;
+}
+
+@keyframes task-complete {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.7;
+  }
+}
+
+.task-complete {
+  animation: task-complete 220ms ease-out;
 }
