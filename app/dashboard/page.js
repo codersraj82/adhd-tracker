@@ -9,6 +9,9 @@ import {
 import ProgressBar from "../../components/ProgressBar";
 import UserName from "../../components/UserName";
 import { updateStreak } from "../../services/streak";
+import FocusRing from "../../components/FocusRing";
+import { playSound } from "../../utils/sound";
+import { setSoundEnabled, isSoundEnabled } from "../../utils/sound";
 
 const sections = [
   {
@@ -135,9 +138,12 @@ export default function DashboardPage() {
   const [recentlyCompletedMainTask, setRecentlyCompletedMainTask] =
     useState("");
   const [customTime, setCustomTime] = useState({});
+  const [startTime, setStartTime] = useState(null);
+  const [soundOn, setSoundOn] = useState(true);
+  const [lastCompletedTask, setLastCompletedTask] = useState("");
 
   //********************* *//
-
+  const activeFocusRef = useRef(null);
   const hasAskedName = useRef(false);
 
   const dailyFocusTotal =
@@ -151,6 +157,30 @@ export default function DashboardPage() {
     : motivation;
 
   //**************************** *//
+  useEffect(() => {
+    setSoundOn(isSoundEnabled());
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("focusSession");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setStartTime(parsed.startTime);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeFocus) return;
+
+    const data = {
+      startTime: Date.now(),
+      duration: activeFocus.duration,
+    };
+
+    localStorage.setItem("focusSession", JSON.stringify(data));
+    setStartTime(data.startTime);
+  }, [activeFocus]);
+
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * motivationMessages.length);
     setMotivation(motivationMessages[randomIndex]);
@@ -225,10 +255,19 @@ export default function DashboardPage() {
     }
 
     if (activeFocus.remainingSeconds <= 0) {
+      playSound("/sounds/complete.mp3");
+
+      const completedTaskLabel = getFocusedTaskLabel(); // 🎯 capture task
+      const sectionLabel = activeFocus.blockType?.toUpperCase();
+
       completeFocusSession(
         activeFocus.duration,
-        "Focus session complete. Nice work 💪",
+        `✅ Completed: ${sectionLabel} → ${completedTaskLabel} 💪`,
       );
+      setLastCompletedTask(
+        `✅ Completed: ${sectionLabel} → ${completedTaskLabel} 💪`,
+      );
+
       setActiveFocus(null);
       return;
     }
@@ -239,14 +278,40 @@ export default function DashboardPage() {
           return null;
         }
 
+        const nextSeconds = currentFocus.remainingSeconds - 1;
+
+        // 🎯 Interval cue every 5 minutes (300 sec)
+        if (nextSeconds > 0 && nextSeconds % 60 === 0) {
+          console.log("🔊 Tick sound triggered at:", nextSeconds);
+
+          playSound("/sounds/tick.mp3");
+        }
+
         return {
           ...currentFocus,
-          remainingSeconds: currentFocus.remainingSeconds - 1,
+          remainingSeconds: nextSeconds,
+        };
+
+        return {
+          ...currentFocus,
+          remainingSeconds: nextSeconds,
         };
       });
     }, 1000);
 
     return () => clearInterval(intervalId);
+  }, [activeFocus]);
+
+  useEffect(() => {
+    if (!activeFocus) return;
+
+    // small delay for smoother UX
+    setTimeout(() => {
+      activeFocusRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 100);
   }, [activeFocus]);
 
   //************************** *//
@@ -286,13 +351,6 @@ export default function DashboardPage() {
       }
     }
 
-    // 👉 CUSTOM TIME
-    // if (duration === "custom") {
-    //   const custom = prompt("Enter minutes:");
-    //   if (!custom) return;
-    //   duration = Number(custom);
-    // }
-
     // ✅ START TIMER
     setActiveFocus({
       blockType,
@@ -300,7 +358,9 @@ export default function DashboardPage() {
       taskIndex,
       duration,
       remainingSeconds: duration * 60,
+      lastCueMinute: duration, // track last cue
     });
+    playSound("/sounds/start.mp3");
 
     setFocusMessage(`${duration} min focus started 🎯`);
   }
@@ -583,7 +643,7 @@ export default function DashboardPage() {
             Good to see you, {userName} 👋
           </p>
           <h1 className="mt-3 text-4xl font-bold text-white sm:text-5xl">
-            ADHD Tracker
+            Be Progressive
           </h1>
           <p className="mt-4 text-base text-slate-400">
             Plan your day in simple sections that are easy to scan.
@@ -614,6 +674,7 @@ export default function DashboardPage() {
         <ProgressBar data={todayData} />
 
         <section
+          ref={activeFocusRef}
           className={`mb-8 rounded-xl border bg-slate-900/80 p-6 shadow-xl shadow-black/25 transition duration-300 ${
             activeFocus
               ? "focus-pulse border-yellow-400/40 shadow-[0_0_10px_rgba(255,215,0,0.4)]"
@@ -633,24 +694,29 @@ export default function DashboardPage() {
                 Today's focus: {dailyFocusTotal} minutes
               </p>
             </div>
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={() => {
+                  const next = !soundOn;
+                  setSoundOn(next);
+                  setSoundEnabled(next);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-yellow-400/30 text-yellow-300 text-sm hover:bg-yellow-400/10 transition"
+              >
+                {soundOn ? "🔊 Sound On" : "🔇 Muted"}
+              </button>
+            </div>
           </div>
 
           {activeFocus && (
             <div className="focus-enter mt-5 rounded-xl border border-yellow-400/30 bg-slate-950/80 px-4 py-4 text-center shadow-[0_0_10px_rgba(255,215,0,0.4)]">
-              <p className="text-sm font-semibold text-yellow-200">
-                🎯 Focusing on:
-              </p>
-
-              <p className="mt-1 text-lg font-semibold text-yellow-100">
+              <FocusRing
+                totalSeconds={activeFocus.duration * 60}
+                remainingSeconds={activeFocus.remainingSeconds}
+                label={activeFocus.blockType?.toUpperCase()}
+              />
+              <p className="mt-4 text-lg font-semibold text-yellow-300 text-center">
                 {getFocusedTaskLabel()}
-              </p>
-
-              <p className="mt-2 text-sm text-slate-400">
-                {activeFocus.blockType?.toUpperCase()}
-              </p>
-
-              <p className="mt-3 text-4xl font-bold text-white">
-                {formatTime(activeFocus.remainingSeconds)}
               </p>
             </div>
           )}
