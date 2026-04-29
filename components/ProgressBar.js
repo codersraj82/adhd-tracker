@@ -108,26 +108,30 @@ export default function ProgressBar({ data }) {
 
   return (
     <section className="mb-8 rounded-xl border border-yellow-400/10 bg-slate-900/80 p-6 shadow-xl shadow-black/25">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
-          <span
-            className={`inline-block transition-transform duration-200 ${
-              shouldScaleEmoji ? "scale-110" : "scale-100"
-            } ${percentage === 100 ? "animate-pulse" : ""}`}
-          >
-            {progressEmoji}
-          </span>
-          Progress
-        </h2>
-        <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-800">
+      <div className="flex flex-col gap-3">
+        {/* Top row */}
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
+            <span
+              className={`inline-block transition-transform duration-200 ${
+                shouldScaleEmoji ? "scale-110" : "scale-100"
+              } ${percentage === 100 ? "animate-pulse" : ""}`}
+            >
+              {progressEmoji}
+            </span>
+            Progress
+          </h2>
+
+          <p className={`text-sm font-semibold ${textColor}`}>{percentage}%</p>
+        </div>
+
+        {/* Progress bar FULL WIDTH */}
+        <div className="w-full h-3 overflow-hidden rounded-full bg-slate-800">
           <div
             className={`h-full rounded-full transition-all duration-500 ease-in-out ${progressColor}`}
             style={{ width: `${percentage}%` }}
           />
         </div>
-        <p className={`text-sm font-semibold transition-colors ${textColor}`}>
-          {percentage}%
-        </p>
       </div>
       <p className="mt-3 text-sm text-slate-400">
         {completedTasks} of {totalTasks} tasks complete

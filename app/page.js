@@ -8,9 +8,7 @@ export default function HomePage() {
           Offline-first focus support
         </p>
 
-        <h1 className="text-3xl font-bold text-white">
-          ADHD Task Tracker
-        </h1>
+        <h1 className="text-3xl font-bold text-white">Get It Done</h1>
 
         <p className="mt-4 text-base leading-7 text-slate-400">
           A simple place to organize your day into calm, manageable sections.

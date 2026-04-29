@@ -150,6 +150,10 @@ export default function DashboardPage() {
   const [lastActivityTime, setLastActivityTime] = useState(Date.now());
   const [shownReminders, setShownReminders] = useState({});
 
+  const [installPrompt, setInstallPrompt] = useState(null);
+
+  const [isLoading, setIsLoading] = useState(true);
+
   //********************* *//
   const activeFocusRef = useRef(null);
   const hasAskedName = useRef(false);
@@ -246,6 +250,8 @@ export default function DashboardPage() {
         setSaveStatus("Saved locally");
       } catch (error) {
         setSaveStatus("Storage unavailable");
+      } finally {
+        setTimeout(() => setIsLoading(false), 500); // smooth delay
       }
     }
 
@@ -446,7 +452,32 @@ export default function DashboardPage() {
     resumeFocus();
   }, []);
 
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault(); // stop auto popup
+      setInstallPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
   //************************** *//
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+
+    installPrompt.prompt();
+
+    const choice = await installPrompt.userChoice;
+
+    if (choice.outcome === "accepted") {
+      setFocusMessage("App installed 🎉");
+    }
+
+    setInstallPrompt(null);
+  };
 
   function isActiveTask(blockType, taskType, taskIndex = null) {
     return (
@@ -834,6 +865,25 @@ export default function DashboardPage() {
 
   //************component started**************** *//
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+        <div className="flex flex-col items-center gap-4 animate-fadeIn">
+          {/* Logo / Title */}
+          <h1 className="text-3xl font-bold text-yellow-400 tracking-wide">
+            Get It Done
+          </h1>
+
+          {/* Subtext */}
+          <p className="text-sm text-slate-400">Preparing your day...</p>
+
+          {/* Loader (Tailwind spinner) */}
+          <div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="fade-in min-h-screen px-4 py-10 text-white sm:py-14">
       <section className="mx-auto w-full max-w-6xl">
@@ -850,6 +900,21 @@ export default function DashboardPage() {
           <p className="mt-4 text-base text-slate-400">
             Plan your day in simple sections that are easy to scan.
           </p>
+          {installPrompt && (
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={handleInstallClick}
+                className="px-4 py-2 rounded-md bg-gradient-to-r from-yellow-400 to-amber-500 text-black text-sm font-semibold shadow hover:scale-105 transition"
+              >
+                📲 Install Get It Done
+              </button>
+              {!installPrompt && (
+                <p className="text-xs text-slate-400 text-center mt-2">
+                  On iPhone: Share → Add to Home Screen 📲
+                </p>
+              )}
+            </div>
+          )}
           <p className="mt-3 text-sm font-medium text-yellow-300">
             {appreciation}
           </p>
@@ -899,7 +964,9 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <ProgressBar data={todayData} />
+        <div className="mt-4 w-full">
+          <ProgressBar data={todayData} />
+        </div>
 
         <section
           ref={activeFocusRef}
