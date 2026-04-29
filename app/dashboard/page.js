@@ -12,6 +12,8 @@ import { updateStreak } from "../../services/streak";
 import FocusRing from "../../components/FocusRing";
 import { playSound } from "../../utils/sound";
 import { setSoundEnabled, isSoundEnabled } from "../../utils/sound";
+import { saveData, loadData } from "../../services/db";
+import { showNotification } from "../../utils/notification";
 
 const sections = [
   {
@@ -142,6 +144,12 @@ export default function DashboardPage() {
   const [soundOn, setSoundOn] = useState(true);
   const [lastCompletedTask, setLastCompletedTask] = useState("");
 
+  const [editingTask, setEditingTask] = useState(null);
+  const [editingText, setEditingText] = useState("");
+
+  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+  const [shownReminders, setShownReminders] = useState({});
+
   //********************* *//
   const activeFocusRef = useRef(null);
   const hasAskedName = useRef(false);
@@ -162,11 +170,15 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("focusSession");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setStartTime(parsed.startTime);
+    async function loadFocus() {
+      const saved = await loadData("focusSession");
+
+      if (saved) {
+        setStartTime(saved.startTime);
+      }
     }
+
+    loadFocus();
   }, []);
 
   useEffect(() => {
@@ -177,7 +189,7 @@ export default function DashboardPage() {
       duration: activeFocus.duration,
     };
 
-    localStorage.setItem("focusSession", JSON.stringify(data));
+    saveData("focusSession", data); // ✅ IndexedDB
     setStartTime(data.startTime);
   }, [activeFocus]);
 
@@ -269,6 +281,8 @@ export default function DashboardPage() {
       );
 
       setActiveFocus(null);
+      // ✅ CLEAR SAVED FOCUS
+      saveData("activeFocus", null);
       return;
     }
 
@@ -286,11 +300,6 @@ export default function DashboardPage() {
 
           playSound("/sounds/tick.mp3");
         }
-
-        return {
-          ...currentFocus,
-          remainingSeconds: nextSeconds,
-        };
 
         return {
           ...currentFocus,
@@ -314,6 +323,129 @@ export default function DashboardPage() {
     }, 100);
   }, [activeFocus]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!todayData) return;
+
+      const now = new Date();
+      const currentTime = now.toTimeString().slice(0, 5);
+      const nowMs = Date.now();
+
+      sections.forEach((section) => {
+        const block = todayData.blocks?.[section.key];
+        const startTime = block?.startTime;
+
+        // 1️⃣ Start Time Reminder
+        if (
+          startTime &&
+          startTime === currentTime &&
+          !shownReminders[`${section.key}-start`]
+        ) {
+          setFocusMessage(`⏰ Time to start: ${section.title}`);
+          if (document.visibilityState !== "visible") {
+            showNotification("⏰ Start Now", `${section.title} task`);
+          }
+
+          playSound("/sounds/start.mp3");
+
+          setShownReminders((prev) => ({
+            ...prev,
+            [`${section.key}-start`]: true,
+          }));
+        }
+
+        // 2️⃣ Missed Start (10 min later)
+        if (
+          startTime &&
+          !block?.mainTask?.completed &&
+          !shownReminders[`${section.key}-missed`]
+        ) {
+          const [h, m] = startTime.split(":").map(Number);
+          const startMs = new Date().setHours(h, m, 0, 0);
+
+          if (nowMs - startMs > 10 * 60 * 1000) {
+            setFocusMessage(`⚠️ You planned ${section.title}, start small`);
+
+            if (document.visibilityState !== "visible") {
+              showNotification(
+                "⚠️ Reminder",
+                `Start ${section.title} — just 2 min`,
+              );
+            }
+            playSound("/sounds/tick.mp3");
+
+            setShownReminders((prev) => ({
+              ...prev,
+              [`${section.key}-missed`]: true,
+            }));
+          }
+        }
+      });
+
+      // 3️⃣ Idle Reminder (no activity 15 min)
+      if (
+        nowMs - lastActivityTime > 15 * 60 * 1000 &&
+        !shownReminders["idle"]
+      ) {
+        setFocusMessage("💭 Still there? Try 2 min focus");
+        if (document.visibilityState !== "visible") {
+          showNotification("💭 Come back", "Try a quick 2-min focus");
+        }
+
+        playSound("/sounds/tick.mp3");
+
+        setShownReminders((prev) => ({
+          ...prev,
+          idle: true,
+        }));
+      }
+    }, 30000); // check every 30 sec
+
+    return () => clearInterval(interval);
+  }, [todayData, lastActivityTime, shownReminders]);
+
+  useEffect(() => {
+    setShownReminders({});
+  }, [todayData?.date]);
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    async function resumeFocus() {
+      const saved = await loadData("activeFocus");
+
+      if (!saved) return;
+
+      const elapsed = Math.floor((Date.now() - saved.startedAt) / 1000);
+      const remaining = saved.duration * 60 - elapsed;
+
+      if (remaining <= 0) {
+        // session already finished → cleanup
+        await saveData("activeFocus", null);
+        return;
+      }
+
+      // 👉 DO NOT auto start (important UX decision)
+      setFocusMessage(
+        `▶ Resume: ${saved.blockType?.toUpperCase()} (${Math.ceil(
+          remaining / 60,
+        )} min left)`,
+      );
+
+      // store temporarily for resume button
+      setActiveFocus({
+        ...saved,
+        remainingSeconds: remaining,
+      });
+    }
+
+    resumeFocus();
+  }, []);
+
   //************************** *//
 
   function isActiveTask(blockType, taskType, taskIndex = null) {
@@ -326,6 +458,7 @@ export default function DashboardPage() {
   }
 
   function handleTaskFocus(blockType, taskType, taskIndex, duration) {
+    setLastActivityTime(Date.now());
     if (!todayData || isFocusBusy) return;
 
     const block = todayData.blocks?.[blockType] || {};
@@ -352,14 +485,19 @@ export default function DashboardPage() {
     }
 
     // ✅ START TIMER
-    setActiveFocus({
+    const focusData = {
       blockType,
       taskType,
       taskIndex,
       duration,
       remainingSeconds: duration * 60,
-      lastCueMinute: duration, // track last cue
-    });
+      lastCueMinute: duration,
+      startedAt: Date.now(),
+    };
+    setActiveFocus(focusData);
+    // ✅ SAVE FULL STATE
+    saveData("activeFocus", focusData);
+
     playSound("/sounds/start.mp3");
 
     setFocusMessage(`${duration} min focus started 🎯`);
@@ -500,6 +638,7 @@ export default function DashboardPage() {
 
   function handleAddTask(event, blockType) {
     event.preventDefault();
+    setLastActivityTime(Date.now());
 
     const title = newTaskTitles[blockType].trim();
     if (!title || !todayData) return;
@@ -533,6 +672,7 @@ export default function DashboardPage() {
   // -------------------------
 
   function handleToggleTask(blockType, taskIndex) {
+    setLastActivityTime(Date.now());
     const currentBlock = todayData.blocks?.[blockType] || {};
     const existingTasks = currentBlock.smallTasks || []; // ✅ FIX
 
@@ -630,6 +770,68 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleExport() {
+    const data = {
+      todayData,
+      streak,
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "adhd-backup.json";
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    setTodayData(data.todayData);
+    setStreak(data.streak);
+
+    await saveData("todayData", data.todayData);
+  }
+
+  function handleEditTask(blockType, taskIndex) {
+    if (!todayData) return;
+
+    const task = todayData.blocks?.[blockType]?.smallTasks?.[taskIndex];
+    if (!task || task.completed) return;
+
+    setEditingTask({ blockType, taskIndex });
+    setEditingText(task.title);
+  }
+
+  function handleSaveEdit(blockType, taskIndex) {
+    if (!editingText.trim()) return;
+
+    const currentBlock = todayData.blocks?.[blockType] || {};
+    const tasks = currentBlock.smallTasks || [];
+
+    const updatedTasks = tasks.map((task, index) =>
+      index === taskIndex ? { ...task, title: editingText } : task,
+    );
+
+    saveBlock(blockType, {
+      ...currentBlock,
+      smallTasks: updatedTasks,
+    });
+
+    setEditingTask(null);
+    setEditingText("");
+  }
+
   //************component started**************** *//
 
   return (
@@ -654,7 +856,33 @@ export default function DashboardPage() {
           <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-500">
             {saveStatus}
           </p>
+          <button
+            onClick={handleExport}
+            className="px-3 py-1 rounded bg-yellow-500 text-black"
+          >
+            Export Data
+          </button>
         </div>
+
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <label className="cursor-pointer">
+            <span className="px-4 py-2 rounded-md bg-gradient-to-r from-yellow-400 to-amber-500 text-black text-sm font-semibold shadow hover:scale-105 transition">
+              📥 Import Backup
+            </span>
+
+            <input
+              type="file"
+              accept="application/json"
+              onChange={handleImport}
+              className="hidden"
+            />
+          </label>
+
+          <p className="text-xs text-slate-400 text-center max-w-xs">
+            Restore your saved data from a backup file
+          </p>
+        </div>
+
         <UserName />
 
         <div className="mb-4 text-center">
@@ -725,6 +953,17 @@ export default function DashboardPage() {
             <p className="mt-4 rounded-md border border-yellow-400/10 bg-slate-950/60 px-3 py-2 text-center text-sm font-medium text-slate-300">
               {focusMessage}
             </p>
+          )}
+          {activeFocus && activeFocus.startedAt && (
+            <button
+              onClick={() => {
+                playSound("/sounds/start.mp3");
+                setFocusMessage("Resumed focus 🎯");
+              }}
+              className="mt-3 px-4 py-2 bg-yellow-500 text-black rounded-md text-sm"
+            >
+              ▶ Resume Focus
+            </button>
           )}
         </section>
 
@@ -1001,9 +1240,19 @@ export default function DashboardPage() {
                               {task.completed && "✓"}
                             </button>
 
-                            <span className="text-sm text-slate-200 flex-1">
-                              {task.title}
-                            </span>
+                            {editingTask &&
+                            editingTask.blockType === section.key &&
+                            editingTask.taskIndex === taskIndex ? (
+                              <input
+                                value={editingText}
+                                onChange={(e) => setEditingText(e.target.value)}
+                                className="flex-1 px-2 py-1 rounded bg-slate-900 border border-yellow-400/30 text-white text-sm"
+                              />
+                            ) : (
+                              <span className="text-sm text-slate-200 flex-1">
+                                {task.title}
+                              </span>
+                            )}
                             {customTime[`${section.key}-${taskIndex}`] !==
                               undefined && (
                               <div className="flex gap-2 mt-1">
@@ -1079,6 +1328,45 @@ export default function DashboardPage() {
                               <option value={25}>25m</option>
                               <option value="custom">Custom</option>
                             </select>
+                            <div className="flex gap-2">
+                              {/* ✏️ Edit */}
+                              {editingTask &&
+                              editingTask.blockType === section.key &&
+                              editingTask.taskIndex === taskIndex ? (
+                                <button
+                                  onClick={() =>
+                                    handleSaveEdit(section.key, taskIndex)
+                                  }
+                                  className="text-green-400 text-xs"
+                                >
+                                  Save
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() =>
+                                    handleEditTask(section.key, taskIndex)
+                                  }
+                                  disabled={task.completed}
+                                  className={`text-xs ${
+                                    task.completed
+                                      ? "text-slate-500 cursor-not-allowed"
+                                      : "text-yellow-400"
+                                  }`}
+                                >
+                                  ✏️
+                                </button>
+                              )}
+
+                              {/* 🗑️ Delete */}
+                              <button
+                                onClick={() =>
+                                  handleDeleteTask(section.key, taskIndex)
+                                }
+                                className="text-red-400 text-xs"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </div>
 
                           {/* ⏱ Timer BELOW */}
