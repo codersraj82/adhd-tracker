@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 
-// Runtime caching rules (optimized)
+// 🔥 Runtime caching rules (FINAL optimized)
 const runtimeCaching = [
   // 1. Pages (HTML navigation)
   {
@@ -8,19 +8,20 @@ const runtimeCaching = [
     handler: "NetworkFirst",
     options: {
       cacheName: "pages-cache",
-      expiration: {
-        maxEntries: 50,
-      },
+      networkTimeoutSeconds: 3, // fallback quickly when offline
     },
   },
 
-  // 2. JS / CSS assets
+  // 2. JS / CSS / Worker (CRITICAL for offline app logic)
   {
     urlPattern: ({ request }) =>
       ["script", "style", "worker"].includes(request.destination),
-    handler: "StaleWhileRevalidate",
+    handler: "CacheFirst", // 🔥 ensures offline JS works
     options: {
       cacheName: "assets-cache",
+      expiration: {
+        maxEntries: 100,
+      },
     },
   },
 
@@ -49,13 +50,14 @@ const runtimeCaching = [
   },
 ];
 
-// PWA setup
+// 🔥 PWA setup
 const withPWA = require("next-pwa")({
   dest: "public",
   register: true,
   skipWaiting: true,
+  clientsClaim: true, // activate new SW immediately
 
-  // Disable in dev (IMPORTANT)
+  // Disable PWA in development
   disable: process.env.NODE_ENV === "development",
 
   runtimeCaching,
