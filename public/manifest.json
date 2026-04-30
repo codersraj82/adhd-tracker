@@ -4,8 +4,8 @@
   "short_name": "ADHDTaskManager",
   "description": "Offline-first ADHD task and focus manager",
 
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "/dashboard",
+  "scope": "/dashboard",
 
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
